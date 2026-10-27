@@ -1,0 +1,58 @@
+[project]
+name = "pic2cookie"
+version = "0.1.0"
+description = "Turn a picture into a 3D-printable cookie cutter"
+readme = "README.md"
+requires-python = ">=3.15"
+dependencies = [
+    "fastapi>=0.162",
+    "mapbox-earcut>=2.1",
+    "numpy>=2.5",
+    "opencv-python-headless>=5.0",
+    "pillow>=13.0",
+    "pydantic-settings>=2.16",
+    "python-multipart>=0.0.32",
+    "shapely>=2.2",
+    "svgpathtools>=1.8",
+    "trimesh>=5.2",
+    "typer>=0.27",
+    "uvicorn>=0.54",
+]
+
+[project.optional-dependencies]
+s3 = ["boto3>=1.43"]
+rq = ["redis>=8.1", "rq>=2.12"]
+mongo = ["pymongo>=4.19"]
+hosted = ["pic2cookie[s3,rq,mongo]"]
+
+[project.scripts]
+pic2cookie = "pic2cookie.cli:app"
+
+[dependency-groups]
+dev = [
+ "httpx2>=2.16.0",
+ "mongomock>=4.3.0",
+ "moto[s3]>=5.2.5",
+ "pytest>=9",
+ "ruff>=0.15",
+]
+
+[build-system]
+requires = ["uv_build>=0.13,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.ruff]
+target-version = "py315"
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff.lint.per-file-ignores]
+"pic2cookie/core/export/bambu.py" = ["E501"]  # XML templates mirror Bambu Studio's output

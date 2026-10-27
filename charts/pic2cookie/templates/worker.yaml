@@ -1,0 +1,34 @@
+{{- if and (eq .Values.executor "rq") (eq .Values.storage.type "s3") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pic2cookie.fullname" . }}-worker
+  labels: {{- include "pic2cookie.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  selector:
+    matchLabels: {{- include "pic2cookie.selector" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels: {{- include "pic2cookie.selector" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+      containers:
+        - name: worker
+          image: {{ include "pic2cookie.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["pic2cookie", "worker"]
+          env: {{- include "pic2cookie.env" . | nindent 12 }}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

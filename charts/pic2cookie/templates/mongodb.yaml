@@ -1,0 +1,60 @@
+{{- if .Values.mongodb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pic2cookie.fullname" . }}-mongodb
+  labels: {{- include "pic2cookie.labels" . | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {{- include "pic2cookie.selector" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+  ports:
+    - name: mongodb
+      port: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "pic2cookie.fullname" . }}-mongodb
+  labels: {{- include "pic2cookie.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mongodb
+spec:
+  serviceName: {{ include "pic2cookie.fullname" . }}-mongodb
+  replicas: 1
+  selector:
+    matchLabels: {{- include "pic2cookie.selector" . | nindent 6 }}
+      app.kubernetes.io/component: mongodb
+  template:
+    metadata:
+      labels: {{- include "pic2cookie.selector" . | nindent 8 }}
+        app.kubernetes.io/component: mongodb
+    spec:
+      {{- with .Values.mongodb.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: mongodb
+          image: {{ .Values.mongodb.image }}
+          ports:
+            - name: mongodb
+              containerPort: 27017
+          readinessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {{- toYaml .Values.mongodb.resources | nindent 12 }}
+          volumeMounts:
+            - {name: db, mountPath: /data/db}
+  volumeClaimTemplates:
+    - metadata:
+        name: db
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.mongodb.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.mongodb.persistence.size }}
+{{- end }}

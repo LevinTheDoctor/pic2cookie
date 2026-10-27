@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#ffffff"/>
+  <path fill="#000" fill-rule="evenodd" d="M100 10 A90 90 0 1 0 100 190 A90 90 0 1 0 100 10 Z M100 70 A30 30 0 1 1 100 130 A30 30 0 1 1 100 70 Z"/>
+  <path d="M100 40 Q120 30 140 50 T165 100 T140 150 T100 160 T60 150 T35 100 T60 50 T100 40" fill="none" stroke="#fff" stroke-width="2.5"/>
+  <g fill="#fff">
+    <rect x="60" y="30" width="12" height="4" transform="rotate(30 66 32)"/>
+    <rect x="130" y="45" width="12" height="4" transform="rotate(-20 136 47)"/>
+    <rect x="160" y="110" width="12" height="4" transform="rotate(70 166 112)"/>
+    <rect x="40" y="130" width="12" height="4" transform="rotate(10 46 132)"/>
+    <rect x="95" y="170" width="12" height="4" transform="rotate(-45 101 172)"/>
+  </g>
+</svg>

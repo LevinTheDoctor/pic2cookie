@@ -1,0 +1,73 @@
+# docker compose up             -> app + MongoDB, files in a volume, jobs in-process
+# docker compose --profile redis up   -> adds Redis and an RQ worker
+# PIC2COOKIE_STORAGE__TYPE=s3 docker compose --profile s3 up -> adds SeaweedFS as S3 storage
+name: pic2cookie
+
+x-app: &app
+  image: ${PIC2COOKIE_IMAGE:-ghcr.io/levinthedoctor/pic2cookie:latest}
+  restart: unless-stopped
+  env_file:
+    - path: .env
+      required: false
+  environment: &env
+    PIC2COOKIE_DATABASE__URI: mongodb://mongo:27017
+    PIC2COOKIE_STORAGE__TYPE: ${PIC2COOKIE_STORAGE__TYPE:-fs}
+    PIC2COOKIE_STORAGE__BUCKET: ${PIC2COOKIE_STORAGE__BUCKET:-pic2cookie}
+    PIC2COOKIE_STORAGE__ENDPOINT_URL: ${PIC2COOKIE_STORAGE__ENDPOINT_URL:-http://s3:8333}
+    PIC2COOKIE_STORAGE__ACCESS_KEY_ID: ${PIC2COOKIE_STORAGE__ACCESS_KEY_ID:-pic2cookie}
+    PIC2COOKIE_STORAGE__SECRET_ACCESS_KEY: ${PIC2COOKIE_STORAGE__SECRET_ACCESS_KEY:-pic2cookie-secret}
+    PIC2COOKIE_EXECUTOR: ${PIC2COOKIE_EXECUTOR:-inline}
+    PIC2COOKIE_REDIS_URL: redis://redis:6379/0
+  volumes:
+    - data:/data
+  depends_on:
+    mongo:
+      condition: service_healthy
+
+services:
+  app:
+    <<: *app
+    ports:
+      - "${PIC2COOKIE_PORT:-8000}:8000"
+
+  worker:
+    <<: *app
+    profiles: [redis]
+    command: ["pic2cookie", "worker"]
+    environment:
+      <<: *env
+      PIC2COOKIE_EXECUTOR: rq
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  mongo:
+    image: mongo:8
+    restart: unless-stopped
+    volumes:
+      - mongo:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      retries: 5
+
+  redis:
+    image: redis:8-alpine
+    profiles: [redis]
+    restart: unless-stopped
+
+  s3:
+    # SeaweedFS with its S3 gateway; without an identity config it accepts any key.
+    image: chrislusf/seaweedfs:latest
+    profiles: [s3]
+    command: ["server", "-dir=/data", "-s3", "-s3.port=8333"]
+    restart: unless-stopped
+    volumes:
+      - s3:/data
+
+volumes:
+  data:
+  mongo:
+  s3:

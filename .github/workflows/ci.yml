@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.15"
+          enable-cache: true
+      - run: uv sync --all-extras --locked
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v4
+      - run: helm lint charts/pic2cookie
+      - name: Render every storage/executor combination
+        run: |
+          set -e
+          for args in "" \
+            "--set executor=rq" \
+            "--set storage.type=s3 --set executor=rq --set storage.s3.accessKeyId=a --set storage.s3.secretAccessKey=b --set replicaCount=2" \
+            "--set mongodb.enabled=false --set database.uri=mongodb://db --set ingress.enabled=true"; do
+            helm template ci charts/pic2cookie $args > /dev/null
+          done
+
+  image:
+    needs: [python, frontend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/pic2cookie
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke-test the image
+        if: github.event_name != 'pull_request'
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/pic2cookie:sha-${GITHUB_SHA::7}"
+          docker run -d --name p2c -p 8000:8000 "$image"
+          for i in $(seq 30); do curl -sf localhost:8000/api/health && break; sleep 1; done
+          curl -sf -F file=@examples/gingerbread.svg localhost:8000/api/designs | tee /tmp/created.json
+          curl -sf localhost:8000/ | grep -q Pic2Cookie
+          docker logs p2c
+
+  chart:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [helm, image]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/setup-helm@v4
+      - name: Package and push the chart to GHCR
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+          helm package charts/pic2cookie --version "$version" --app-version "$version"
+          helm push "pic2cookie-${version}.tgz" "oci://ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/charts"

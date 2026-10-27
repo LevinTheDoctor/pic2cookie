@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# App data and local config
+data/
+.env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Generated examples
+examples/*.stl
+
+.DS_Store

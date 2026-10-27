@@ -1,0 +1,78 @@
+{{- $fs := eq .Values.storage.type "fs" }}
+{{- if and $fs (gt (int .Values.replicaCount) 1) (eq .Values.storage.persistence.accessMode "ReadWriteOnce") }}
+{{- fail "replicaCount > 1 needs storage.type=s3 or a ReadWriteMany volume" }}
+{{- end }}
+{{- if and (gt (int .Values.replicaCount) 1) (eq .Values.executor "inline") }}
+{{- fail "replicaCount > 1 needs executor=rq (job status lives in the app process otherwise)" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pic2cookie.fullname" . }}
+  labels: {{- include "pic2cookie.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  replicas: {{ .Values.replicaCount }}
+  {{- if $fs }}
+  strategy:
+    type: Recreate  # a ReadWriteOnce volume can only be mounted by one pod at a time
+  {{- end }}
+  selector:
+    matchLabels: {{- include "pic2cookie.selector" . | nindent 6 }}
+      app.kubernetes.io/component: app
+  template:
+    metadata:
+      labels: {{- include "pic2cookie.selector" . | nindent 8 }}
+        app.kubernetes.io/component: app
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        fsGroup: 10001
+      containers:
+        - name: app
+          image: {{ include "pic2cookie.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env: {{- include "pic2cookie.env" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8000
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          {{- if $fs }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+          {{- end }}
+        {{- if include "pic2cookie.sidecarWorker" . }}
+        - name: worker
+          image: {{ include "pic2cookie.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["pic2cookie", "worker"]
+          env: {{- include "pic2cookie.env" . | nindent 12 }}
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+        {{- end }}
+      {{- if $fs }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Values.storage.persistence.existingClaim | default (printf "%s-data" (include "pic2cookie.fullname" .)) }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity: {{- toYaml . | nindent 8 }}
+      {{- end }}

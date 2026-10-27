@@ -1,0 +1,37 @@
+{{- if and (eq .Values.executor "rq") .Values.redis.enabled (not .Values.redis.url) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "pic2cookie.fullname" . }}-redis
+  labels: {{- include "pic2cookie.labels" . | nindent 4 }}
+spec:
+  selector: {{- include "pic2cookie.selector" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+  ports:
+    - name: redis
+      port: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "pic2cookie.fullname" . }}-redis
+  labels: {{- include "pic2cookie.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "pic2cookie.selector" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels: {{- include "pic2cookie.selector" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          args: ["--save", "", "--appendonly", "no"]  # jobs are short-lived
+          ports:
+            - name: redis
+              containerPort: 6379
+{{- end }}

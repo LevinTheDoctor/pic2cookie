@@ -1,0 +1,81 @@
+image:
+  repository: ghcr.io/levinthedoctor/pic2cookie
+  tag: ""  # defaults to the chart's appVersion
+  pullPolicy: IfNotPresent
+# The repo is private: create a GHCR pull secret and name it here.
+imagePullSecrets: []
+
+replicaCount: 1  # more than 1 needs storage.type=s3 (or an RWX volume) and executor=rq
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: traefik  # k3s default
+  host: pic2cookie.local
+  annotations: {}
+  tls: []  # e.g. [{secretName: pic2cookie-tls, hosts: [pic2cookie.local]}]
+
+# Where Design files live.
+storage:
+  type: fs  # fs: a PersistentVolume (iSCSI, Longhorn, local-path, NFS...); s3: a bucket
+  persistence:
+    size: 5Gi
+    storageClass: ""  # empty = cluster default
+    accessMode: ReadWriteOnce  # iSCSI/Longhorn volumes are RWO: everything stays in one pod
+    existingClaim: ""
+  s3:
+    bucket: pic2cookie
+    prefix: ""
+    endpointUrl: ""  # e.g. http://seaweedfs-s3:8333; empty for AWS
+    region: ""
+    accessKeyId: ""
+    secretAccessKey: ""
+    existingSecret: ""  # keys: access-key-id, secret-access-key
+
+# Generation jobs: inline (thread pool inside the app) or rq (Redis + workers).
+executor: inline
+worker:
+  replicas: 1  # only used with storage.type=s3; with fs the worker runs inside the app pod
+  resources: {}
+redis:
+  enabled: true  # bundled single Redis, used when executor=rq
+  url: ""  # external Redis instead, e.g. redis://redis:6379/0
+  image: redis:8-alpine
+
+# Design records. Bundled single-node MongoDB, or an external one.
+mongodb:
+  enabled: true
+  image: mongo:8  # MongoDB 5+ needs AVX (x86) / ARMv8.2 (ARM); use "mongo:4.4" on older CPUs
+  # A Raspberry Pi 4 cannot run MongoDB 5+, so keep it on an amd64 node.
+  nodeSelector:
+    kubernetes.io/arch: amd64
+  persistence:
+    size: 2Gi
+    storageClass: ""
+  resources: {}
+database:
+  uri: ""  # external MongoDB when mongodb.enabled=false; empty = design.json files
+  name: pic2cookie
+  existingSecret: ""  # key: uri
+
+retention:
+  days: null  # delete Designs not changed for this many days
+
+limits:
+  uploadMb: 10
+  maxPixels: 4096
+  jobTimeout: 120
+
+extraEnv: []
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+nodeSelector: {}
+tolerations: []
+affinity: {}

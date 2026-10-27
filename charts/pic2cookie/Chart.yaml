@@ -1,0 +1,8 @@
+apiVersion: v2
+name: pic2cookie
+description: Turn a picture into a 3D-printable cookie cutter
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/LevinTheDoctor/pic2cookie
+icon: https://raw.githubusercontent.com/LevinTheDoctor/pic2cookie/main/frontend/public/icon-512.png

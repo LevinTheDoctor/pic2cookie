@@ -1,0 +1,17 @@
+{{- if and (eq .Values.storage.type "fs") (not .Values.storage.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "pic2cookie.fullname" . }}-data
+  labels: {{- include "pic2cookie.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep  # Designs survive `helm uninstall`
+spec:
+  accessModes: [{{ .Values.storage.persistence.accessMode }}]
+  {{- with .Values.storage.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.persistence.size }}
+{{- end }}

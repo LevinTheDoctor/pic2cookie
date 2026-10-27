@@ -1,0 +1,11 @@
+.git
+.venv
+.scratch
+data
+.env
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+frontend/node_modules
+frontend/dist
+examples/*.stl

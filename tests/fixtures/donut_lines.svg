@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <g fill="none" stroke="#000" stroke-width="3">
+    <circle cx="100" cy="100" r="90"/>
+    <circle cx="100" cy="100" r="30"/>
+    <path d="M100 40 Q120 30 140 50 T165 100 T140 150 T100 160 T60 150 T35 100 T60 50 T100 40"/>
+    <line x1="60" y1="30" x2="72" y2="36"/>
+    <line x1="130" y1="48" x2="142" y2="44"/>
+    <line x1="160" y1="108" x2="164" y2="120"/>
+    <line x1="40" y1="130" x2="52" y2="132"/>
+  </g>
+</svg>

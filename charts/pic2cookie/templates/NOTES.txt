@@ -1,0 +1,11 @@
+Pic2Cookie is starting.
+{{- if .Values.ingress.enabled }}
+Open http://{{ .Values.ingress.host }}
+{{- else }}
+  kubectl port-forward svc/{{ include "pic2cookie.fullname" . }} 8000:{{ .Values.service.port }}
+then open http://127.0.0.1:8000
+{{- end }}
+
+Files: {{ .Values.storage.type }}{{ if eq .Values.storage.type "fs" }} (PVC {{ .Values.storage.persistence.existingClaim | default (printf "%s-data" (include "pic2cookie.fullname" .)) }}){{ end }}
+Records: {{ if .Values.mongodb.enabled }}bundled MongoDB ({{ .Values.mongodb.image }}){{ else if or .Values.database.uri .Values.database.existingSecret }}external MongoDB{{ else }}design.json files{{ end }}
+Jobs: {{ .Values.executor }}{{ if include "pic2cookie.sidecarWorker" . }} (worker runs inside the app pod){{ end }}
