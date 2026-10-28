@@ -3,6 +3,7 @@ name = "pic2cookie"
 version = "0.1.0"
 description = "Turn a picture into a 3D-printable cookie cutter"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.15"
 dependencies = [
     "fastapi>=0.162",

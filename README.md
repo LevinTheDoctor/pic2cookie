@@ -116,3 +116,7 @@ uv run python scripts/fetch_bambu_profiles.py # refresh Bambu presets
 ```
 
 GitHub Actions runs all of this on every PR. On `main` and on tags it also builds and pushes the multi-arch image. On `v*` tags it publishes the Helm chart. Docker is only built in CI.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
