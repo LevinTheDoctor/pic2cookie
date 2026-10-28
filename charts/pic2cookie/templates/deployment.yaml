@@ -25,6 +25,8 @@ spec:
       labels: {{- include "pic2cookie.selector" . | nindent 8 }}
         app.kubernetes.io/component: app
     spec:
+      # Service links would set PIC2COOKIE_PORT=tcp://... and clash with the settings prefix
+      enableServiceLinks: false
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets: {{- toYaml . | nindent 8 }}
       {{- end }}

@@ -2,8 +2,7 @@ image:
   repository: ghcr.io/levinthedoctor/pic2cookie
   tag: ""  # defaults to the chart's appVersion
   pullPolicy: IfNotPresent
-# The repo is private: create a GHCR pull secret and name it here.
-imagePullSecrets: []
+imagePullSecrets: []  # only needed for a private registry
 
 replicaCount: 1  # more than 1 needs storage.type=s3 (or an RWX volume) and executor=rq
 
@@ -17,6 +16,16 @@ ingress:
   host: pic2cookie.local
   annotations: {}
   tls: []  # e.g. [{secretName: pic2cookie-tls, hosts: [pic2cookie.local]}]
+
+# Cloudflare Tunnel (remotely managed): no ingress or open port needed.
+# In the dashboard, point the tunnel's public hostname at
+# the app Service (helm install prints its URL)
+cloudflared:
+  enabled: false
+  image: cloudflare/cloudflared:latest
+  replicas: 2
+  existingSecret: ""  # key: token (the tunnel token from the dashboard)
+  resources: {}
 
 # Where Design files live.
 storage:

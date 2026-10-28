@@ -101,7 +101,7 @@ helm install pic2cookie oci://ghcr.io/levinthedoctor/charts/pic2cookie \
 - **Files in S3**: `--set storage.type=s3,storage.s3.bucket=…,storage.s3.endpointUrl=…,storage.s3.existingSecret=…`. Then `replicaCount` and `worker.replicas` can be raised.
 - **MongoDB** is bundled as a single-node StatefulSet, pinned to `amd64` nodes, because a Raspberry Pi 4 cannot run MongoDB 5+. On x86 CPUs without AVX, set `mongodb.image=mongo:4.4`. To use your own, set `mongodb.enabled=false` and `database.uri=…`.
 - The image is built for amd64 and arm64, so the app itself runs on a Pi too.
-- The repository is private: add a GHCR pull secret and set `imagePullSecrets`.
+- **Cloudflare Tunnel** instead of an ingress: create a tunnel in the dashboard, store its token with `kubectl create secret generic cloudflared-token --from-literal=token=…`, then `--set cloudflared.enabled=true,cloudflared.existingSecret=cloudflared-token` and point the tunnel's public hostname at the Service URL the install prints.
 - Hosting mode is on: set `hosting.operator.name`, `.address` and `.email` so the privacy notice names who runs the instance.
 
 ## Development

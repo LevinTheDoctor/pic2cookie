@@ -1,6 +1,9 @@
 Pic2Cookie is starting.
 {{- if .Values.ingress.enabled }}
 Open http://{{ .Values.ingress.host }}
+{{- else if .Values.cloudflared.enabled }}
+Cloudflare Tunnel: point its public hostname at
+  http://{{ include "pic2cookie.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.service.port }}
 {{- else }}
   kubectl port-forward svc/{{ include "pic2cookie.fullname" . }} 8000:{{ .Values.service.port }}
 then open http://127.0.0.1:8000
