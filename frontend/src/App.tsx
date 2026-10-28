@@ -1,32 +1,58 @@
 import {
   ArrowPathIcon,
   CheckCircleIcon,
+  CodeBracketIcon,
   DocumentDuplicateIcon,
   ExclamationTriangleIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { api, fileUrl, waitForJob, type Design, type DesignPatch, type Feature, type Meta, type Role } from './api'
+import type { CSSProperties } from 'react'
+import {
+  api,
+  ApiError,
+  fileUrl,
+  productFiles,
+  waitForJob,
+  type Design,
+  type DesignPatch,
+  type Feature,
+  type Meta,
+  type Product,
+  type Role,
+} from './api'
 import { DesignList } from './components/DesignList'
 import { Downloads } from './components/Downloads'
 import { Estimate } from './components/Estimate'
+import { PrivacyDialog, UploadNotice } from './components/Privacy'
 import { Legend, RoleView } from './components/RoleView'
-import { CutterSettings, PrintSettings, TraceSettings } from './components/Settings'
-import { Upload } from './components/Upload'
+import { CoasterSettings, CutterSettings, PrintSettings, TraceSettings } from './components/Settings'
+import { ProductChoice, Upload } from './components/Upload'
+import { I18nProvider } from './I18nProvider'
+import { LANGS, useI18n, type Notice } from './i18n'
 
-// three.js is large; load it only once a cutter is shown.
-const CutterPreview = lazy(() => import('./components/CutterPreview').then((m) => ({ default: m.CutterPreview })))
+// three.js is large; load it only once a model is shown.
+const Preview = lazy(() => import('./components/Preview').then((m) => ({ default: m.Preview })))
 
 const selectedFromHash = () => window.location.hash.replace(/^#\/?/, '') || null
 
 export default function App() {
+  return (
+    <I18nProvider>
+      <Shell />
+    </I18nProvider>
+  )
+}
+
+function Shell() {
+  const { t, tm, lang, setLang } = useI18n()
   const [meta, setMeta] = useState<Meta | null>(null)
   const [designs, setDesigns] = useState<Design[]>([])
   const [selected, setSelected] = useState<string | null>(selectedFromHash)
   const [loaded, setDesign] = useState<Design | null>(null)
   const design = loaded && loaded.id === selected ? loaded : null
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Notice | string | null>(null)
   const latest = useRef(0) // only the newest change may update the view
 
   const refreshList = useCallback(() => api.designs().then(setDesigns).catch(() => {}), [])
@@ -65,7 +91,7 @@ export default function App() {
       await start()
       if (ticket === latest.current) await refreshList()
     } catch (e) {
-      if (ticket === latest.current) setError((e as Error).message)
+      if (ticket === latest.current) setError(e instanceof ApiError && e.notice ? e.notice : (e as Error).message)
     } finally {
       if (ticket === latest.current) setBusy(false)
     }
@@ -82,9 +108,11 @@ export default function App() {
     })
   }
 
+  const [newProduct, setNewProduct] = useState<Product>('cutter')
+
   const upload = (file: File) =>
     track(async () => {
-      const { design: created, job } = await api.upload(file)
+      const { design: created, job } = await api.upload(file, newProduct)
       select(created.id)
       setDesign(created)
       await waitForJob(job)
@@ -125,6 +153,14 @@ export default function App() {
   }
 
   const [flipped, setFlipped] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
+  const hosting = meta?.hosting ?? null
+  // A result from before switching Product does not match the files any more.
+  const result = design?.result?.product === design?.product ? design?.result : null
+  const coaster = design?.product === 'coaster'
+  const colours = design && coaster
+    ? ({ '--plate': design.coaster.plate_colour, '--motif': design.coaster.motif_colour } as CSSProperties)
+    : undefined
 
   return (
     <div className="app">
@@ -134,124 +170,175 @@ export default function App() {
           Pic<span>2</span>Cookie
         </h1>
         {meta && <span className="version">v{meta.version}</span>}
+        <nav className="header-links">
+          {hosting && (
+            <>
+              <a className="btn ghost" href={hosting.repository_url} target="_blank" rel="noreferrer">
+                <CodeBracketIcon className="icon" /> {t('header.github')}
+              </a>
+              <button type="button" className="btn ghost" onClick={() => setPrivacyOpen(true)}>
+                {t('header.privacy')}
+              </button>
+            </>
+          )}
+          <span className="segmented lang" role="group" aria-label={t('lang.label')}>
+            {LANGS.map(([code, label]) => (
+              <button key={code} type="button" className={code === lang ? 'on' : ''} onClick={() => setLang(code)}>
+                {label}
+              </button>
+            ))}
+          </span>
+        </nav>
       </header>
+      {hosting && privacyOpen && <PrivacyDialog hosting={hosting} onClose={() => setPrivacyOpen(false)} />}
 
       <aside className="sidebar">
-        <Upload onFile={upload} />
-        <p className="section-title">Designs</p>
+        <ProductChoice value={newProduct} onChange={setNewProduct} />
+        <Upload onFile={upload} product={newProduct} />
+        {hosting && <UploadNotice onPrivacy={() => setPrivacyOpen(true)} />}
+        <p className="section-title">{t('designs.title')}</p>
         <DesignList designs={designs} selected={selected} onSelect={select} />
       </aside>
 
       <main className="main">
         {error && (
           <div className="card error">
-            <ExclamationTriangleIcon className="icon" /> {error}
+            <ExclamationTriangleIcon className="icon" /> {tm(error)}
           </div>
         )}
-        {!design && <Upload onFile={upload} hero />}
+        {!design && (
+          <>
+            <div className="hero-choice">
+              <ProductChoice value={newProduct} onChange={setNewProduct} />
+            </div>
+            <Upload onFile={upload} product={newProduct} hero />
+          </>
+        )}
         {design && meta && (
           <>
             <div className="title-row">
               <input
-                aria-label="Design name"
+                aria-label={t('design.name')}
                 defaultValue={design.name}
                 key={design.id}
                 onBlur={(e) => e.target.value.trim() && e.target.value !== design.name && patch({ name: e.target.value.trim() })}
                 onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
               />
+              <ProductChoice value={design.product} onChange={(product) => patch({ product })} />
               <span className="status">
                 {busy || design.status === 'new' ? (
                   <>
-                    <ArrowPathIcon className="icon spin" /> Generating…
+                    <ArrowPathIcon className="icon spin" /> {t('status.generating')}
                   </>
                 ) : design.status === 'ready' ? (
                   <>
-                    <CheckCircleIcon className="icon" style={{ color: 'var(--green)' }} /> Ready
+                    <CheckCircleIcon className="icon" style={{ color: 'var(--green)' }} /> {t('status.ready')}
                   </>
                 ) : null}
               </span>
-              <button className="btn ghost" title="Duplicate" onClick={duplicate}>
+              <button className="btn ghost" title={t('action.duplicate')} onClick={duplicate}>
                 <DocumentDuplicateIcon className="icon" />
               </button>
-              <button className="btn ghost danger" title="Delete" onClick={remove}>
+              <button className="btn ghost danger" title={t('action.delete')} onClick={remove}>
                 <TrashIcon className="icon" />
-                {confirmDelete && 'Click again to delete'}
+                {confirmDelete && t('action.confirmDelete')}
               </button>
             </div>
 
             {design.status === 'failed' && (
               <div className="card error">
-                <ExclamationTriangleIcon className="icon" /> {design.error}
+                <ExclamationTriangleIcon className="icon" /> {design.error ? tm(design.error) : t('error.generic')}
               </div>
             )}
 
             <div className="workspace">
               <div className="side" style={{ minWidth: 0 }}>
                 <div className="views">
-                  <div className="card">
+                  <div className="card" style={colours}>
                     <h2>
-                      Picture <span className="hint">click a part to change its role</span>
+                      {t('picture.title')} <span className="hint">{t('picture.hint')}</span>
                     </h2>
                     <div className="stage">
-                      {design.result ? (
-                        <RoleView outline={design.result.outline} features={design.result.features} onChange={changeRole} />
+                      {result ? (
+                        <RoleView
+                          product={design.product}
+                          outline={result.outline}
+                          features={result.features}
+                          onChange={changeRole}
+                        />
                       ) : (
-                        <div className="overlay">Tracing…</div>
+                        <div className="overlay">{t('picture.tracing')}</div>
                       )}
                     </div>
-                    <Legend />
+                    <Legend product={design.product} />
                   </div>
                   <div className="card">
                     <h2>
-                      Cutter
+                      {t(coaster ? 'view.coaster' : 'view.cutter')}
                       <span className="hint">
                         <span className="segmented">
                           <button className={!flipped ? 'on' : ''} onClick={() => setFlipped(false)}>
-                            Print view
+                            {t(coaster ? 'view.top' : 'view.print')}
                           </button>
                           <button className={flipped ? 'on' : ''} onClick={() => setFlipped(true)}>
-                            Cutting view
+                            {t(coaster ? 'view.underside' : 'view.cutting')}
                           </button>
                         </span>
                       </span>
                     </h2>
                     <div className="stage">
-                      {design.result ? (
-                        <Suspense fallback={<div className="overlay">Loading 3D view…</div>}>
-                          <CutterPreview url={fileUrl(design, 'cutter.stl')} flipped={flipped} />
+                      {result ? (
+                        <Suspense fallback={<div className="overlay">{t('view.loading3d')}</div>}>
+                          <Preview
+                            parts={productFiles(design).preview.map((p) => ({
+                              url: fileUrl(design, p.file),
+                              colour: p.colour,
+                            }))}
+                            flipped={flipped}
+                          />
                         </Suspense>
                       ) : (
-                        <div className="overlay">Generating…</div>
+                        <div className="overlay">{t('view.generating')}</div>
                       )}
                     </div>
                   </div>
                 </div>
-                {design.result && design.result.warnings.length > 0 && (
+                {result && result.warnings.length > 0 && (
                   <ul className="warnings">
-                    {design.result.warnings.map((w) => (
-                      <li key={w}>
-                        <ExclamationTriangleIcon className="icon" /> {w}
+                    {result.warnings.map((w) => (
+                      <li key={w.text}>
+                        <ExclamationTriangleIcon className="icon" /> {tm(w)}
                       </li>
                     ))}
                   </ul>
                 )}
-                <CutterSettings design={design} onPatch={patch} />
+                {coaster ? (
+                  <CoasterSettings design={design} onPatch={patch} />
+                ) : (
+                  <CutterSettings design={design} onPatch={patch} />
+                )}
                 {design.source.kind === 'raster' && <TraceSettings design={design} onPatch={patch} />}
               </div>
 
               <div className="side">
                 <div className="card">
-                  <h2>Filament estimate</h2>
-                  {design.result ? <Estimate result={design.result} /> : <p className="note">Generating…</p>}
-                  <p className="note">Printed nearly solid; your slicer may differ slightly.</p>
+                  <h2>{t('estimate.title')}</h2>
+                  {result ? <Estimate result={result} /> : <p className="note">{t('estimate.generating')}</p>}
+                  <p className="note">{t('estimate.note')}</p>
                 </div>
                 <div className="card">
-                  <h2>Print</h2>
+                  <h2>{t('print.title')}</h2>
                   <PrintSettings design={design} meta={meta} onPatch={patch} />
+                  {result?.pause_z != null && (
+                    <p className="note">{t('print.pause', { z: result.pause_z })}</p>
+                  )}
+                  {result && result.parts.length > 1 && (
+                    <p className="note">{t('print.ams')}</p>
+                  )}
                 </div>
-                {design.result && (
+                {result && (
                   <div className="card">
-                    <h2>Download</h2>
+                    <h2>{t('download.title')}</h2>
                     <Downloads design={design} />
                   </div>
                 )}

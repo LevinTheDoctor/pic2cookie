@@ -37,6 +37,29 @@ class LimitSettings(BaseModel):
     job_timeout: int = 120  # seconds
 
 
+class LogSettings(BaseModel):
+    level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    format: Literal["text", "json"] = "text"  # json: one JSON object per line, for Loki & co.
+    access: bool = True  # log every request (with the visitor's IP address)
+
+
+class OperatorSettings(BaseModel):
+    """Who runs a hosted instance; named in the privacy notice (Art. 13 GDPR)."""
+
+    name: str | None = None
+    address: str | None = None
+    email: str | None = None
+
+
+class HostingSettings(BaseModel):
+    """Running as a service for others: shows the source link and a privacy notice."""
+
+    enabled: bool = False
+    repository_url: str = "https://github.com/LevinTheDoctor/pic2cookie"
+    operator: OperatorSettings = OperatorSettings()
+    privacy_url: str | None = None  # link to your own full privacy policy as well
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="PIC2COOKIE_", env_nested_delimiter="__", env_file=".env", extra="ignore"
@@ -48,6 +71,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     retention: RetentionSettings = RetentionSettings()
     limits: LimitSettings = LimitSettings()
+    hosting: HostingSettings = HostingSettings()
+    log: LogSettings = LogSettings()
     frontend_dir: Path | None = None  # defaults to frontend/dist next to the package
 
 

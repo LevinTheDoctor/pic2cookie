@@ -94,6 +94,34 @@ app.kubernetes.io/instance: {{ .Release.Name }}
   value: {{ .Values.limits.maxPixels | quote }}
 - name: PIC2COOKIE_LIMITS__JOB_TIMEOUT
   value: {{ .Values.limits.jobTimeout | quote }}
+- name: PIC2COOKIE_LOG__LEVEL
+  value: {{ .Values.log.level | quote }}
+- name: PIC2COOKIE_LOG__FORMAT
+  value: {{ .Values.log.format | quote }}
+- name: PIC2COOKIE_LOG__ACCESS
+  value: {{ .Values.log.access | quote }}
+- name: PIC2COOKIE_HOSTING__ENABLED
+  value: {{ .Values.hosting.enabled | quote }}
+{{- with .Values.hosting.repositoryUrl }}
+- name: PIC2COOKIE_HOSTING__REPOSITORY_URL
+  value: {{ . | quote }}
+{{- end }}
+{{- with .Values.hosting.operator.name }}
+- name: PIC2COOKIE_HOSTING__OPERATOR__NAME
+  value: {{ . | quote }}
+{{- end }}
+{{- with .Values.hosting.operator.address }}
+- name: PIC2COOKIE_HOSTING__OPERATOR__ADDRESS
+  value: {{ . | quote }}
+{{- end }}
+{{- with .Values.hosting.operator.email }}
+- name: PIC2COOKIE_HOSTING__OPERATOR__EMAIL
+  value: {{ . | quote }}
+{{- end }}
+{{- with .Values.hosting.privacyUrl }}
+- name: PIC2COOKIE_HOSTING__PRIVACY_URL
+  value: {{ . | quote }}
+{{- end }}
 {{- with .Values.extraEnv }}
 {{ toYaml . }}
 {{- end }}

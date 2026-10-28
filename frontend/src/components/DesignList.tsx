@@ -1,5 +1,6 @@
 import { ExclamationTriangleIcon } from '@heroicons/react/24/outline'
 import { fileUrl, type Design } from '../api'
+import { useI18n } from '../i18n'
 
 export function DesignList({
   designs,
@@ -10,7 +11,8 @@ export function DesignList({
   selected: string | null
   onSelect: (id: string) => void
 }) {
-  if (!designs.length) return <p className="sub">No saved designs yet.</p>
+  const { t, num } = useI18n()
+  if (!designs.length) return <p className="sub">{t('designs.empty')}</p>
   return (
     <ul className="designs">
       {designs.map((d) => (
@@ -26,12 +28,12 @@ export function DesignList({
               <span className="sub">
                 {d.status === 'failed' ? (
                   <>
-                    <ExclamationTriangleIcon className="icon" style={{ width: 12, height: 12 }} /> failed
+                    <ExclamationTriangleIcon className="icon" style={{ width: 12, height: 12 }} /> {t('designs.failed')}
                   </>
                 ) : d.result ? (
-                  `${d.result.estimate.grams} g · ${Math.round(d.cutter.size)} mm`
+                  `${t(d.product === 'coaster' ? 'product.coaster' : 'product.cutter')} · ${num(d.result.estimate.grams)} g · ${Math.round(d.product === 'coaster' ? d.coaster.size : d.cutter.size)} mm`
                 ) : (
-                  'generating…'
+                  t('designs.generating')
                 )}
               </span>
             </span>

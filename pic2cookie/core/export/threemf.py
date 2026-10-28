@@ -47,16 +47,38 @@ def package(files: dict[str, str | bytes]) -> bytes:
     return buf.getvalue()
 
 
-def to_3mf(mesh, name: str) -> bytes:
-    """A plain 3MF that any slicer can open."""
+def attr(value: str) -> str:
+    return escape(value, {'"': "&quot;"})
+
+
+def to_3mf(parts, name: str) -> bytes:
+    """A plain 3MF that any slicer can open; several parts become one object with coloured components."""
+    if len(parts) == 1:
+        resources = f'<object id="1" name="{attr(name)}" type="model">{mesh_xml(parts[0].mesh)}</object>'
+        item = 1
+    else:
+        bases = "".join(
+            f'<base name="{attr(p.name)}" displaycolor="{p.colour or "#808080"}FF"/>' for p in parts
+        )
+        objects = "".join(
+            f'<object id="{i + 2}" name="{attr(p.name)}" type="model" pid="1" pindex="{i}">'
+            f"{mesh_xml(p.mesh)}</object>"
+            for i, p in enumerate(parts)
+        )
+        item = len(parts) + 2
+        components = "".join(f'<component objectid="{i + 2}"/>' for i in range(len(parts)))
+        resources = (
+            f'<basematerials id="1">{bases}</basematerials>{objects}'
+            f'<object id="{item}" name="{attr(name)}" type="model">'
+            f"<components>{components}</components></object>"
+        )
     model = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         f'<model unit="millimeter" xml:lang="en-US" xmlns="{CORE_NS}">\n'
         f' <metadata name="Title">{escape(name)}</metadata>\n'
         f' <metadata name="Application">Pic2Cookie</metadata>\n'
-        f' <resources><object id="1" name="{escape(name, {chr(34): "&quot;"})}" type="model">'
-        f"{mesh_xml(mesh)}</object></resources>\n"
-        ' <build><item objectid="1"/></build>\n'
+        f" <resources>{resources}</resources>\n"
+        f' <build><item objectid="{item}"/></build>\n'
         "</model>\n"
     )
     return package(

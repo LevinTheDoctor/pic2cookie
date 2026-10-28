@@ -105,6 +105,7 @@ def test_changing_tracing_resets_roles(client, donut_png):
 def test_bad_uploads(client):
     res = client.post("/api/designs", files={"file": ("x.txt", b"hello", "text/plain")})
     assert res.status_code == 422
+    assert res.json()["detail"]["code"] == "upload_type"
     res = client.post(
         "/api/designs",
         files={"file": ("x.svg", b"<svg xmlns='http://www.w3.org/2000/svg'/>", "image/svg+xml")},
@@ -112,7 +113,8 @@ def test_bad_uploads(client):
     job = wait(client, res.json()["job"])
     assert job["status"] == "failed"
     design = client.get(f"/api/designs/{res.json()['design']['id']}").json()
-    assert design["status"] == "failed" and "Ink" in design["error"]
+    assert design["status"] == "failed"
+    assert design["error"]["code"] == "no_ink" and "Ink" in design["error"]["text"]
 
 
 def test_unknown_printer(client, fixture_bytes):
@@ -132,3 +134,66 @@ def test_retention_sweep(client, fixture_bytes, monkeypatch):
     monkeypatch.setattr(svc.cfg.retention, "days", 30)
     assert svc.sweep() == [design["id"]]
     assert client.get("/api/designs").json() == []
+
+
+def test_coaster_design(client, fixture_bytes):
+    files = {"file": ("hi.svg", fixture_bytes("hi.svg"), "image/svg+xml")}
+    res = client.post("/api/designs", files=files, data={"product": "coaster"})
+    assert res.status_code == 201, res.text
+    body = res.json()
+    assert wait(client, body["job"])["status"] == "done"
+    design = client.get(f"/api/designs/{body['design']['id']}").json()
+    assert design["product"] == "coaster"
+    result = design["result"]
+    assert result["product"] == "coaster"
+    assert [p["name"] for p in result["parts"]] == ["plate", "motif"]
+    assert {f["role"] for f in result["features"]} == {"motif"}
+    for name in ("coaster.stl.zip", "coaster.3mf", "coaster.bambu.3mf", "plate.stl", "motif.stl"):
+        res = client.get(f"/api/designs/{design['id']}/files/{name}?download=true")
+        assert res.status_code == 200, name
+    assert (
+        "hi.stl.zip"
+        in client.get(f"/api/designs/{design['id']}/files/coaster.stl.zip?download=true").headers[
+            "content-disposition"
+        ]
+    )
+
+    res = client.patch(
+        f"/api/designs/{design['id']}",
+        json={"coaster": {**design["coaster"], "opener": "coin"}, "roles": {"m2": "ignore"}},
+    )
+    wait(client, res.json()["job"])
+    changed = client.get(f"/api/designs/{design['id']}").json()
+    assert changed["result"]["pause_z"] == 3.8
+    assert changed["result"]["dimensions"]["width"] > 150
+
+    res = client.patch(f"/api/designs/{design['id']}", json={"product": "cutter"})
+    wait(client, res.json()["job"])
+    cutter = client.get(f"/api/designs/{design['id']}").json()
+    assert cutter["result"]["product"] == "cutter"
+    assert client.get(f"/api/designs/{design['id']}/files/cutter.stl").status_code == 200
+
+
+def test_meta_has_coaster_defaults(client):
+    meta = client.get("/api/meta").json()
+    assert meta["defaults"]["coaster"]["shape"] == "round"
+    assert meta["coins"]["eur2"]["diameter"] == 25.75
+    stl = next(f for f in meta["formats"] if f["id"] == "stl")
+    assert stl["filenames"] == {"cutter": "cutter.stl", "coaster": "coaster.stl.zip"}
+
+
+def test_hosting_is_off_locally(client):
+    assert client.get("/api/meta").json()["hosting"] is None
+
+
+def test_hosting_mode(client, monkeypatch):
+    from pic2cookie import settings
+
+    monkeypatch.setenv("PIC2COOKIE_HOSTING__ENABLED", "true")
+    monkeypatch.setenv("PIC2COOKIE_HOSTING__OPERATOR__NAME", "Jane Doe")
+    monkeypatch.setenv("PIC2COOKIE_RETENTION__DAYS", "30")
+    settings.settings.cache_clear()
+    hosting = client.get("/api/meta").json()["hosting"]
+    assert hosting["repository_url"] == "https://github.com/LevinTheDoctor/pic2cookie"
+    assert hosting["operator"]["name"] == "Jane Doe"
+    assert hosting["retention_days"] == 30

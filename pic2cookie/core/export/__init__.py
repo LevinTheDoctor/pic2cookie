@@ -1,4 +1,4 @@
-"""Cutter mesh in, file bytes out."""
+"""Parts of a Cutter or Coaster in, file bytes out."""
 
 import json
 from dataclasses import dataclass
@@ -6,7 +6,8 @@ from enum import StrEnum
 from functools import cache
 from pathlib import Path
 
-from pic2cookie.core.model import Material
+from pic2cookie.core.model import CodedError, Dimensions, Material, Notice, Product
+from pic2cookie.core.solid import Part
 
 PROFILES = Path(__file__).parent / "bambu_profiles"
 
@@ -16,13 +17,12 @@ class Format(StrEnum):
     THREEMF = "3mf"
     BAMBU = "bambu"
 
-    @property
-    def filename(self) -> str:
-        return {"stl": "cutter.stl", "3mf": "cutter.3mf", "bambu": "cutter.bambu.3mf"}[self]
-
-    @property
-    def media_type(self) -> str:
-        return "model/stl" if self is Format.STL else "model/3mf"
+    def filename(self, product: Product = Product.CUTTER) -> str:
+        """A Coaster's STL is a zip with one STL per coloured part."""
+        suffix = {"stl": ".stl", "3mf": ".3mf", "bambu": ".bambu.3mf"}[self]
+        if self is Format.STL and product is Product.COASTER:
+            suffix = ".stl.zip"
+        return f"{product.value}{suffix}"
 
 
 @dataclass(frozen=True)
@@ -42,7 +42,11 @@ DEFAULT_PRINTER = "a1mini"
 def profile(printer_id: str) -> dict:
     path = PROFILES / f"{printer_id}.json"
     if printer_id not in PRINTER_ORDER or not path.exists():
-        raise ValueError(f"Unknown printer {printer_id!r}; choose one of {', '.join(PRINTER_ORDER)}")
+        raise CodedError(
+            "unknown_printer",
+            f"Unknown printer {printer_id!r}; choose one of {', '.join(PRINTER_ORDER)}",
+            printer=printer_id,
+        )
     return json.loads(path.read_text())
 
 
@@ -66,24 +70,45 @@ def printer(printer_id: str) -> Printer:
     raise AssertionError
 
 
+def bed_warning(dimensions: Dimensions, printer_id: str) -> str | None:
+    p = printer(printer_id)
+    fits = (dimensions.width <= p.bed[0] and dimensions.depth <= p.bed[1]) or (
+        dimensions.depth <= p.bed[0] and dimensions.width <= p.bed[1]
+    )
+    if fits and dimensions.height <= p.height:
+        return None
+    return Notice(
+        "too_big_for_bed",
+        f"At {dimensions.width:g} x {dimensions.depth:g} mm it does not fit the {p.name}'s bed.",
+        width=dimensions.width,
+        depth=dimensions.depth,
+        printer=p.name,
+    )
+
+
 def export(
-    mesh,
+    parts: list[Part] | object,
     fmt: Format,
     *,
     name: str = "cutter",
+    product: Product = Product.CUTTER,
     printer_id: str = DEFAULT_PRINTER,
     material: Material = Material.PLA,
+    pause_z: float | None = None,
 ) -> bytes:
+    """`parts` may also be a single mesh. `pause_z` adds a pause to the Bambu project."""
+    if not isinstance(parts, list):
+        parts = [Part(product.value, [], parts)]
     match fmt:
         case Format.STL:
-            from pic2cookie.core.export.stl import to_stl
+            from pic2cookie.core.export.stl import to_stl, to_stl_zip
 
-            return to_stl(mesh)
+            return to_stl_zip(parts) if product is Product.COASTER else to_stl(parts[0].mesh)
         case Format.THREEMF:
             from pic2cookie.core.export.threemf import to_3mf
 
-            return to_3mf(mesh, name)
+            return to_3mf(parts, name)
         case Format.BAMBU:
             from pic2cookie.core.export.bambu import to_bambu_3mf
 
-            return to_bambu_3mf(mesh, name, printer_id, material)
+            return to_bambu_3mf(parts, name, printer_id, material, pause_z)

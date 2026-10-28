@@ -18,6 +18,9 @@ x-app: &app
     PIC2COOKIE_STORAGE__SECRET_ACCESS_KEY: ${PIC2COOKIE_STORAGE__SECRET_ACCESS_KEY:-pic2cookie-secret}
     PIC2COOKIE_EXECUTOR: ${PIC2COOKIE_EXECUTOR:-inline}
     PIC2COOKIE_REDIS_URL: redis://redis:6379/0
+    # Hosted: links the source and shows the privacy notice. Put the operator's
+    # PIC2COOKIE_HOSTING__OPERATOR__NAME/ADDRESS/EMAIL into .env.
+    PIC2COOKIE_HOSTING__ENABLED: ${PIC2COOKIE_HOSTING__ENABLED:-true}
   volumes:
     - data:/data
   depends_on:

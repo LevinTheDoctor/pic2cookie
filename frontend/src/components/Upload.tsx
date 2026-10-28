@@ -1,9 +1,33 @@
 import { ArrowUpTrayIcon } from '@heroicons/react/24/outline'
 import { useRef, useState, type DragEvent } from 'react'
+import type { Product } from '../api'
+import { useI18n } from '../i18n'
 
 const ACCEPT = '.svg,.png,.jpg,.jpeg,.webp,image/svg+xml,image/png,image/jpeg,image/webp'
 
-export function Upload({ onFile, hero = false }: { onFile: (file: File) => void; hero?: boolean }) {
+export function ProductChoice({ value, onChange }: { value: Product; onChange: (p: Product) => void }) {
+  const { t } = useI18n()
+  return (
+    <span className="segmented product-choice" role="group" aria-label={t('product.label')}>
+      {(['cutter', 'coaster'] as const).map((p) => (
+        <button key={p} type="button" className={p === value ? 'on' : ''} onClick={() => onChange(p)}>
+          {t(p === 'cutter' ? 'product.cutter' : 'product.coaster')}
+        </button>
+      ))}
+    </span>
+  )
+}
+
+export function Upload({
+  onFile,
+  product,
+  hero = false,
+}: {
+  onFile: (file: File) => void
+  product: Product
+  hero?: boolean
+}) {
+  const { t } = useI18n()
   const input = useRef<HTMLInputElement>(null)
   const [active, setActive] = useState(false)
 
@@ -29,12 +53,13 @@ export function Upload({ onFile, hero = false }: { onFile: (file: File) => void;
       onDrop={drop}
     >
       {hero && <img src="/logo.svg" alt="" />}
-      {hero && <h2>Turn a picture into a cookie cutter</h2>}
+      {hero && <h2>{t('upload.hero')}</h2>}
       <ArrowUpTrayIcon className="icon" />
       <span>
-        <strong>Drop a picture</strong> or click to choose
+        <strong>{t('upload.drop')}</strong> {t('upload.orClick')}{' '}
+        {t(product === 'cutter' ? 'upload.makesCutter' : 'upload.makesCoaster')}
       </span>
-      <span>SVG, PNG, JPG or WebP</span>
+      <span>{t('upload.types')}</span>
       <input
         ref={input}
         type="file"

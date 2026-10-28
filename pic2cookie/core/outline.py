@@ -22,7 +22,7 @@ lazy from svgpathtools.svg_to_paths import (
     rect2pathd,
 )
 
-from pic2cookie.core.model import Role
+from pic2cookie.core.model import CodedError, Role
 
 SKIPPED_TAGS = {
     "defs",
@@ -65,7 +65,7 @@ NAMED_COLOURS = {
 }
 
 
-class SvgError(ValueError):
+class SvgError(CodedError):
     pass
 
 
@@ -278,9 +278,9 @@ def parse_svg(data: bytes | str, ink: str | None = None, tolerance: float = 0.35
     try:
         root = ET.fromstring(data)
     except ET.ParseError as e:
-        raise SvgError(f"Not a valid SVG: {e}") from e
+        raise SvgError("svg_invalid", f"Not a valid SVG: {e}", detail=str(e)) from e
     if _local(root.tag) != "svg":
-        raise SvgError("Not an SVG document")
+        raise SvgError("svg_invalid", "Not an SVG document", detail="")
     ink_rgb = parse_colour(ink) if ink else None
     shapes: list[_Shape] = []
     _walk(root, np.identity(3), {"fill": "black"}, shapes)
@@ -306,7 +306,7 @@ def parse_svg(data: bytes | str, ink: str | None = None, tolerance: float = 0.35
             else:
                 drawn = drawn.difference(geom)
     if drawn.is_empty:
-        raise SvgError("The SVG contains no Ink")
+        raise SvgError("no_ink", "The SVG contains no Ink")
     return Drawing(ink=shapely.make_valid(drawn))
 
 
@@ -316,7 +316,8 @@ def _marked_drawing(shapes: list[_Shape]) -> Drawing:
         try:
             role = Role(shape.attrs["data-role"])
         except ValueError as e:
-            raise SvgError(f"Unknown data-role {shape.attrs['data-role']!r}") from e
+            role = shape.attrs["data-role"]
+            raise SvgError("svg_bad_role", f"Unknown data-role {role!r}", role=role) from e
         geom = _fill_geometry(shape)
         if geom.is_empty:
             continue
@@ -327,5 +328,5 @@ def _marked_drawing(shapes: list[_Shape]) -> Drawing:
         )
     outer = [m for m in marked if m.role is Role.OUTER]
     if not outer:
-        raise SvgError('A role-marked SVG needs an element with data-role="outer"')
+        raise SvgError("svg_no_outer", 'A role-marked SVG needs an element with data-role="outer"')
     return Drawing(ink=shapely.union_all([m.geometry for m in outer]), marked=marked)

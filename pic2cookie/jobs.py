@@ -1,5 +1,6 @@
 """Generation jobs, run in a local thread pool (`inline`) or by RQ workers (`rq`)."""
 
+import logging
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from functools import cache
@@ -12,6 +13,8 @@ lazy import rq
 lazy from rq.exceptions import NoSuchJobError
 
 from pic2cookie.settings import Settings, settings
+
+log = logging.getLogger(__name__)
 
 Status = Literal["queued", "running", "done", "failed"]
 
@@ -34,7 +37,7 @@ def run_generate(design_id: str) -> str:
 
     design = service().generate(design_id)
     if design.status == "failed":
-        raise RuntimeError(design.error)
+        raise RuntimeError(design.error.text if design.error else "Generation failed")
     return design.id
 
 
@@ -84,6 +87,7 @@ class RqExecutor:
         job = self.queue.enqueue(
             run_generate, design_id, job_timeout=self.timeout, result_ttl=3600, failure_ttl=86400
         )
+        log.debug("Job queued", extra={"job_id": job.id, "design_id": design_id})
         return Job(id=job.id, design_id=design_id, status="queued")
 
     def get(self, job_id: str) -> Job | None:

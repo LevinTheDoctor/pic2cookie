@@ -1,30 +1,36 @@
 import { ArrowDownTrayIcon, ArrowTopRightOnSquareIcon, CubeIcon } from '@heroicons/react/24/outline'
-import { bambuStudioLink, fileUrl, type Design } from '../api'
+import { bambuStudioLink, fileUrl, productFiles, type Design } from '../api'
+import { useI18n } from '../i18n'
 
 export function Downloads({ design }: { design: Design }) {
+  const { t } = useI18n()
+  const files = productFiles(design)
+  const coaster = design.product === 'coaster'
   return (
     <div className="downloads">
       <a className="btn primary" href={bambuStudioLink(design)}>
-        <ArrowTopRightOnSquareIcon className="icon" /> Open in Bambu Studio
+        <ArrowTopRightOnSquareIcon className="icon" /> {t('download.openBambu')}
       </a>
-      <a className="btn" href={fileUrl(design, 'cutter.bambu.3mf', true)}>
-        <CubeIcon className="icon" /> Bambu project (.3mf)
+      <a className="btn" href={fileUrl(design, files.bambu, true)}>
+        <CubeIcon className="icon" /> {t('download.bambu')}
       </a>
       <div className="row">
-        <a className="btn" href={fileUrl(design, 'cutter.stl', true)}>
-          <ArrowDownTrayIcon className="icon" /> STL
+        <a className="btn" href={fileUrl(design, files.stl, true)} title={coaster ? t('download.stlZipTitle') : undefined}>
+          <ArrowDownTrayIcon className="icon" /> {t(coaster ? 'download.stlZip' : 'download.stl')}
         </a>
-        <a className="btn" href={fileUrl(design, 'cutter.3mf', true)}>
-          <ArrowDownTrayIcon className="icon" /> 3MF
+        <a className="btn" href={fileUrl(design, files.threemf, true)}>
+          <ArrowDownTrayIcon className="icon" /> {t('download.threemf')}
         </a>
       </div>
       <div className="row">
         <a className="btn" href={fileUrl(design, 'picture.svg', true)}>
-          <ArrowDownTrayIcon className="icon" /> Picture SVG
+          <ArrowDownTrayIcon className="icon" /> {t('download.picture')}
         </a>
-        <a className="btn" href={fileUrl(design, 'roles.svg', true)} title="For pic2cookie make">
-          <ArrowDownTrayIcon className="icon" /> Roles SVG
-        </a>
+        {!coaster && (
+          <a className="btn" href={fileUrl(design, 'roles.svg', true)} title={t('download.rolesTitle')}>
+            <ArrowDownTrayIcon className="icon" /> {t('download.roles')}
+          </a>
+        )}
       </div>
     </div>
   )

@@ -12,9 +12,18 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from pic2cookie import __version__
+from pic2cookie import __version__, logs
 from pic2cookie.core.export import DEFAULT_PRINTER, Format, printers
-from pic2cookie.core.model import DENSITY, CutterParams, FilamentParams, TraceParams
+from pic2cookie.core.model import (
+    COINS,
+    DENSITY,
+    CoasterParams,
+    CutterParams,
+    FilamentParams,
+    Message,
+    Product,
+    TraceParams,
+)
 from pic2cookie.designs import Design, DesignPatch
 from pic2cookie.jobs import Job, executor
 from pic2cookie.service import InvalidUpload, media_type, service
@@ -35,7 +44,7 @@ async def _sweep_forever() -> None:
         try:
             removed = await asyncio.to_thread(service().sweep)
             if removed:
-                log.info("Retention removed %d design(s)", len(removed))
+                log.info("Retention removed %d design(s)", len(removed), extra={"design_ids": removed})
         except Exception:
             log.exception("Retention sweep failed")
         await asyncio.sleep(3600)
@@ -43,7 +52,20 @@ async def _sweep_forever() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(_sweep_forever()) if settings().retention.days else None
+    cfg = settings()
+    logs.setup(cfg.log)  # again here: with --reload the app runs in a child process
+    log.info(
+        "Pic2Cookie %s started",
+        __version__,
+        extra={
+            "storage": cfg.storage.type,
+            "database": "mongodb" if cfg.database.uri else "files",
+            "executor": cfg.executor,
+            "hosting": cfg.hosting.enabled,
+            "retention_days": cfg.retention.days,
+        },
+    )
+    task = asyncio.create_task(_sweep_forever()) if cfg.retention.days else None
     yield
     if task:
         task.cancel()
@@ -77,14 +99,20 @@ def meta() -> dict:
         ],
         "default_printer": DEFAULT_PRINTER,
         "materials": {m.value: {"density": d} for m, d in DENSITY.items()},
-        "formats": [{"id": f.value, "filename": f.filename} for f in Format],
+        "formats": [{"id": f.value, "filenames": {p.value: f.filename(p) for p in Product}} for f in Format],
+        "coins": {c.value: {"diameter": d, "thickness": t} for c, (d, t) in COINS.items()},
         "defaults": {
             "cutter": CutterParams().model_dump(),
+            "coaster": CoasterParams().model_dump(),
             "trace": TraceParams().model_dump(),
             "filament": FilamentParams().model_dump(),
         },
         "limits": cfg.limits.model_dump(),
         "executor": cfg.executor,
+        # Only a hosted instance shows the source link and the privacy notice.
+        "hosting": (
+            cfg.hosting.model_dump() | {"retention_days": cfg.retention.days} if cfg.hosting.enabled else None
+        ),
     }
 
 
@@ -95,13 +123,16 @@ def list_designs() -> list[Design]:
 
 @app.post("/api/designs", status_code=201)
 async def create_design(
-    file: Annotated[UploadFile, File()], name: Annotated[str | None, Form()] = None
+    file: Annotated[UploadFile, File()],
+    name: Annotated[str | None, Form()] = None,
+    product: Annotated[Product, Form()] = Product.CUTTER,
 ) -> DesignWithJob:
     data = await file.read()
     try:
-        design = await asyncio.to_thread(service().create, file.filename or "picture", data, name)
+        design = await asyncio.to_thread(service().create, file.filename or "picture", data, name, product)
     except InvalidUpload as e:
-        raise HTTPException(422, str(e)) from None
+        log.info("Upload rejected: %s", e, extra={"code": e.notice.code})
+        raise HTTPException(422, Message.of(e).model_dump()) from None
     return DesignWithJob(design=design, job=executor().submit(design.id))
 
 
@@ -116,7 +147,7 @@ def update_design(design_id: str, patch: DesignPatch, generate: bool = True) -> 
     try:
         design = service().update(design_id, patch)
     except ValueError as e:
-        raise HTTPException(422, str(e)) from None
+        raise HTTPException(422, Message.of(e).model_dump()) from None
     return DesignWithJob(design=design, job=executor().submit(design_id) if generate else None)
 
 
@@ -148,7 +179,8 @@ def design_file(design_id: str, name: str, download: bool = False) -> Response:
         raise HTTPException(404, "File not found") from None
     headers = {"Cache-Control": "no-cache"}
     if download:
-        filename = f"{design.name}{name.removeprefix('cutter')}" if name.startswith("cutter") else name
+        stem = design.product.value
+        filename = f"{design.name}{name.removeprefix(stem)}" if name.startswith(f"{stem}.") else name
         headers["Content-Disposition"] = f"attachment; filename*=UTF-8''{quote(filename)}"
     return Response(data, media_type=media_type(name), headers=headers)
 

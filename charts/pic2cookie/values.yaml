@@ -64,6 +64,23 @@ database:
 retention:
   days: null  # delete Designs not changed for this many days
 
+# A hosted instance links its source code and shows a privacy notice (GDPR / DSGVO).
+# Fill in who runs it: the notice names the operator as the one responsible.
+hosting:
+  enabled: true
+  repositoryUrl: https://github.com/LevinTheDoctor/pic2cookie
+  operator:
+    name: ""
+    address: ""  # e.g. "Street 1, 12345 City"
+    email: ""
+  privacyUrl: ""  # optional link to your own full privacy policy
+
+# Logs go to stdout/stderr; "json" suits Loki, Promtail and the like.
+log:
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  format: json  # or text
+  access: true  # request logs, which contain visitors' IP addresses
+
 limits:
   uploadMb: 10
   maxPixels: 4096

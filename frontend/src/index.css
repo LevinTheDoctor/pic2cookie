@@ -16,6 +16,8 @@
   --imprint: #00ae42;
   --ignore: #c9cfcb;
   --dough: #f2d6a8;
+  --plate: #ffffff;
+  --motif: #1d211f;
   --radius: 10px;
   --shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 4px 16px rgb(0 0 0 / 5%);
   color-scheme: light;
@@ -110,6 +112,95 @@ button {
   margin-left: auto;
   color: var(--muted);
   font-size: 0.8rem;
+}
+
+.header-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-links .lang {
+  margin-left: 6px;
+}
+
+.header-links .lang button {
+  padding: 3px 8px;
+  font-size: 0.78rem;
+}
+
+.header-links .btn {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-decoration: none;
+}
+
+button.link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--green);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.hero-choice {
+  display: flex;
+  justify-content: center;
+}
+
+.upload-notice {
+  margin: 8px 2px 0;
+  line-height: 1.4;
+}
+
+dialog.privacy {
+  max-width: 640px;
+  width: calc(100% - 32px);
+  max-height: calc(100vh - 64px);
+  padding: 20px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+dialog.privacy::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+dialog.privacy .privacy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+dialog.privacy h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+dialog.privacy h3 {
+  margin: 18px 0 4px;
+  font-size: 0.95rem;
+}
+
+dialog.privacy p {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+
+dialog.privacy a {
+  color: var(--green);
+}
+
+.warning-text {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  color: var(--warning);
 }
 
 .sidebar {
@@ -488,6 +579,15 @@ button {
   stroke-width: 0.8;
 }
 
+.roleview.coaster .outline {
+  fill: var(--plate);
+}
+
+.roleview .feature.motif {
+  fill: var(--motif);
+  stroke: var(--motif);
+}
+
 .roleview .feature.ignore {
   fill: transparent;
   stroke: var(--ignore);
@@ -569,6 +669,14 @@ button {
   background: var(--surface-2);
 }
 
+.sidebar .product-choice {
+  display: flex;
+}
+
+.sidebar .product-choice button {
+  flex: 1;
+}
+
 .segmented {
   display: inline-flex;
   border: 1px solid var(--border);
@@ -630,6 +738,26 @@ details.more[open] summary {
   font-weight: normal;
   color: var(--muted);
   margin-left: 2px;
+}
+
+.stat.parts {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat.parts .part {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+}
+
+.stat.parts .grams {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
 }
 
 .note {

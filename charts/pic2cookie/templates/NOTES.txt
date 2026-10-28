@@ -9,3 +9,8 @@ then open http://127.0.0.1:8000
 Files: {{ .Values.storage.type }}{{ if eq .Values.storage.type "fs" }} (PVC {{ .Values.storage.persistence.existingClaim | default (printf "%s-data" (include "pic2cookie.fullname" .)) }}){{ end }}
 Records: {{ if .Values.mongodb.enabled }}bundled MongoDB ({{ .Values.mongodb.image }}){{ else if or .Values.database.uri .Values.database.existingSecret }}external MongoDB{{ else }}design.json files{{ end }}
 Jobs: {{ .Values.executor }}{{ if include "pic2cookie.sidecarWorker" . }} (worker runs inside the app pod){{ end }}
+{{- if and .Values.hosting.enabled (not .Values.hosting.operator.name) }}
+
+Hosting mode is on but hosting.operator.name is empty: the privacy notice
+(GDPR / DSGVO) should name who runs this instance. Set hosting.operator.*.
+{{- end }}

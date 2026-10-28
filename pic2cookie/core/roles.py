@@ -9,7 +9,7 @@ lazy import shapely
 lazy from shapely import affinity
 lazy from shapely.geometry import MultiPolygon, Polygon
 
-from pic2cookie.core.model import CutterParams, Feature, Role
+from pic2cookie.core.model import CodedError, CutterParams, Feature, Notice, Role
 from pic2cookie.core.outline import Drawing
 
 # Ink covering at least this share of the Silhouette makes a filled drawing.
@@ -78,9 +78,15 @@ def path_data(geom) -> str:
 def _largest(geom, warnings: list[str]):
     polys = sorted(polygons(geom), key=lambda p: -p.area)
     if not polys:
-        raise ValueError("Nothing to make a cutter from")
+        raise CodedError("nothing_to_make", "Nothing to make a cutter from")
     if len(polys) > 1 and polys[1].area > 0.01 * polys[0].area:
-        warnings.append(f"The picture has {len(polys)} separate shapes; only the largest is used.")
+        warnings.append(
+            Notice(
+                "separate_shapes",
+                f"The picture has {len(polys)} separate shapes; only the largest is used.",
+                n=len(polys),
+            )
+        )
     return Polygon(polys[0].exterior)
 
 
@@ -165,7 +171,12 @@ def _drop_small(result: Layout, params: CutterParams) -> None:
         f = fs.feature
         if f.role is Role.HOLE and not _fits(fs.geometry, params.min_hole):
             result.warnings.append(
-                f"Hole {f.id} is narrower than {params.min_hole:g} mm; the dough may not come out of it."
+                Notice(
+                    "hole_narrow",
+                    f"Hole {f.id} is narrower than {params.min_hole:g} mm; the dough may not come out of it.",
+                    id=f.id,
+                    mm=params.min_hole,
+                )
             )
         elif (
             f.default_role is Role.IMPRINT
@@ -181,11 +192,21 @@ def _drop_small(result: Layout, params: CutterParams) -> None:
                 dropped_imprints += 1
     if narrow_holes:
         result.warnings.append(
-            f"{narrow_holes} hole(s) narrower than {params.min_hole:g} mm became Imprint blades."
+            Notice(
+                "holes_became_imprints",
+                f"{narrow_holes} hole(s) narrower than {params.min_hole:g} mm became Imprint blades.",
+                n=narrow_holes,
+                mm=params.min_hole,
+            )
         )
     if dropped_imprints:
         result.warnings.append(
-            f"Dropped {dropped_imprints} imprint(s) smaller than {params.min_imprint:g} mm."
+            Notice(
+                "imprints_dropped",
+                f"Dropped {dropped_imprints} imprint(s) smaller than {params.min_imprint:g} mm.",
+                n=dropped_imprints,
+                mm=params.min_imprint,
+            )
         )
 
 

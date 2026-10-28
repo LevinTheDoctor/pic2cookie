@@ -10,20 +10,13 @@ cutter is flipped to cut.
 from dataclasses import dataclass, field
 
 lazy import shapely
-lazy import trimesh
 lazy from shapely import affinity
 lazy from shapely.geometry import Polygon
 lazy from shapely.ops import nearest_points
 
-from pic2cookie.core.model import CutterParams, Dimensions, Role
+from pic2cookie.core.model import CutterParams, Dimensions, Notice, Role
 from pic2cookie.core.roles import Layout, clean, polygons, stroke_width
-
-
-@dataclass
-class Layer:
-    region: object  # (Multi)Polygon
-    z0: float
-    z1: float
+from pic2cookie.core.solid import Layer, Part, centre, extrude, volume
 
 
 @dataclass
@@ -35,7 +28,11 @@ class Cutter:
 
     @property
     def volume_mm3(self) -> float:
-        return sum(layer.region.area * (layer.z1 - layer.z0) for layer in self.layers)
+        return volume(self.layers)
+
+    @property
+    def parts(self) -> list[Part]:
+        return [Part("cutter", self.layers, self.mesh)]
 
 
 def build(result: Layout, params: CutterParams) -> Cutter:
@@ -61,12 +58,15 @@ def build(result: Layout, params: CutterParams) -> Cutter:
     blades = clean(outer_blade.union(inner_blades))
     imprint_top = params.blade_height - params.imprint_offset
     if not imprints.is_empty and imprint_top <= params.flange_height:
-        warnings.append("The imprint offset leaves no Imprint blade above the Flange.")
+        warnings.append(
+            Notice("imprint_offset_too_big", "The imprint offset leaves no Imprint blade above the Flange.")
+        )
         imprints = Polygon()
 
     gaps = silhouette.buffer(t).buffer(-t).difference(silhouette)
     if any(g.area > 2 * t * t for g in polygons(gaps)):  # ignore fillets in concave corners
-        warnings.append(f"Gaps narrower than {2 * t:.1f} mm between parts of the shape will print solid.")
+        text = f"Gaps narrower than {2 * t:.1f} mm between parts of the shape will print solid."
+        warnings.append(Notice("gaps_solid", text, mm=round(2 * t, 1)))
 
     base = clean(shapely.union_all([outer_flange, inner_flanges, support, blades, imprints]))
     layers = [Layer(base, 0.0, params.flange_height)]
@@ -77,7 +77,8 @@ def build(result: Layout, params: CutterParams) -> Cutter:
         layers.append(Layer(blades, params.flange_height, params.blade_height))
     layers = [layer for layer in layers if not layer.region.is_empty and layer.z1 > layer.z0]
 
-    mesh = _extrude(layers)
+    mesh = extrude(layers)
+    centre([mesh])
     minx, miny, maxx, maxy = base.bounds
     dims = Dimensions(width=round(maxx - minx, 2), depth=round(maxy - miny, 2), height=params.blade_height)
     return Cutter(mesh, layers, dims, warnings)
@@ -125,18 +126,3 @@ def _bridges(anchored, floating, width: float, within):
         bars.append(bar.buffer(width / 2, cap_style="flat").intersection(within))
         attached = attached.union(piece).union(bars[-1])
     return clean(shapely.union_all(bars)) if bars else Polygon()
-
-
-def _extrude(layers: list[Layer]):
-    meshes = []
-    for layer in layers:
-        # Shrinking by a micron splits rings that touch at a point, which would
-        # otherwise share a vertical edge between four faces.
-        for poly in polygons(layer.region.buffer(-1e-3, join_style="mitre")):
-            mesh = trimesh.creation.extrude_polygon(poly, layer.z1 - layer.z0, engine="earcut")
-            mesh.apply_translation((0, 0, layer.z0))
-            meshes.append(mesh)
-    mesh = trimesh.util.concatenate(meshes)
-    lo, hi = mesh.bounds
-    mesh.apply_translation((-(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2, -lo[2]))
-    return mesh

@@ -2,6 +2,7 @@
 
 import io
 import logging
+import time
 import uuid
 from datetime import timedelta
 from functools import cache
@@ -9,9 +10,9 @@ from pathlib import PurePath
 
 lazy from PIL import Image, UnidentifiedImageError
 
-from pic2cookie.core.export import Format, export, printer
-from pic2cookie.core.model import Role
-from pic2cookie.core.pipeline import make, to_svg
+from pic2cookie.core.export import Format, bed_warning, export, printer
+from pic2cookie.core.model import CodedError, Message, Product, Role
+from pic2cookie.core.pipeline import make, make_coaster, to_svg
 from pic2cookie.core.roles import path_data
 from pic2cookie.core.trace import is_svg
 from pic2cookie.designs import Design, DesignPatch, DesignResult, Source, now
@@ -30,10 +31,11 @@ MEDIA_TYPES = {
     ".webp": "image/webp",
     ".stl": "model/stl",
     ".3mf": "model/3mf",
+    ".zip": "application/zip",
 }
 
 
-class InvalidUpload(ValueError):
+class InvalidUpload(CodedError):
     pass
 
 
@@ -50,10 +52,13 @@ class DesignService:
     def _key(self, design_id: str, name: str) -> str:
         return f"designs/{design_id}/{name}"
 
-    def create(self, filename: str, data: bytes, name: str | None = None) -> Design:
+    def create(
+        self, filename: str, data: bytes, name: str | None = None, product: Product = Product.CUTTER
+    ) -> Design:
         limit = self.cfg.limits.upload_mb * 1024 * 1024
         if len(data) > limit:
-            raise InvalidUpload(f"The file is larger than {self.cfg.limits.upload_mb:g} MB")
+            mb = self.cfg.limits.upload_mb
+            raise InvalidUpload("upload_too_large", f"The file is larger than {mb:g} MB", mb=mb)
         if is_svg(data):
             kind, ext = "svg", ".svg"
         else:
@@ -61,19 +66,27 @@ class DesignService:
                 image = Image.open(io.BytesIO(data))
                 fmt = image.format
             except (UnidentifiedImageError, OSError) as e:
-                raise InvalidUpload("Upload an SVG, PNG, JPG or WebP picture") from e
+                raise InvalidUpload("upload_type", "Upload an SVG, PNG, JPG or WebP picture") from e
             if fmt not in ("PNG", "JPEG", "WEBP"):
-                raise InvalidUpload("Upload an SVG, PNG, JPG or WebP picture")
+                raise InvalidUpload("upload_type", "Upload an SVG, PNG, JPG or WebP picture")
             if max(image.size) > self.cfg.limits.max_pixels:
-                raise InvalidUpload(f"The picture is larger than {self.cfg.limits.max_pixels} px")
+                px = self.cfg.limits.max_pixels
+                raise InvalidUpload("upload_too_many_pixels", f"The picture is larger than {px} px", px=px)
             kind, ext = "raster", {"PNG": ".png", "JPEG": ".jpg", "WEBP": ".webp"}[fmt]
         design_id = uuid.uuid4().hex[:12]
-        stem = PurePath(filename).stem or "cutter"
+        stem = PurePath(filename).stem or product.value
         design = Design(
-            id=design_id, name=name or stem, source=Source(filename=filename, kind=kind, key=f"source{ext}")
+            id=design_id,
+            name=name or stem,
+            product=product,
+            source=Source(filename=filename, kind=kind, key=f"source{ext}"),
         )
         self.blobs.put(self._key(design_id, design.source.key), data, media_type(ext))
         self.repo.save(design)
+        log.info(
+            "Design created",
+            extra={"design_id": design_id, "product": product.value, "source": kind, "bytes": len(data)},
+        )
         return design
 
     def get(self, design_id: str) -> Design:
@@ -91,55 +104,94 @@ class DesignService:
             changes.setdefault("roles", {})  # feature ids change with the tracing
         design = design.model_copy(update=changes | {"updated": now()})
         self.repo.save(design)
+        log.debug("Design updated", extra={"design_id": design_id, "fields": sorted(changes)})
         return design
 
     def generate(self, design_id: str) -> Design:
-        """Run the pipeline and store the picture, roles and Cutter files."""
+        """Run the pipeline and store the picture and the Product's files."""
         design = self.get(design_id)
+        started = time.perf_counter()
         try:
             source = self.blobs.get(self._key(design_id, design.source.key))
-            result = make(
-                source,
-                design.cutter,
-                design.trace,
-                design.filament,
-                {k: Role(v) for k, v in design.roles.items()},
-            )
-            files = {
-                PICTURE: result.svg.encode(),
-                ROLES: result.marked_svg.encode(),
-            }
-            for fmt in Format:
-                files[fmt.filename] = export(
-                    result.cutter.mesh,
-                    fmt,
-                    name=design.name,
-                    printer_id=design.printer,
-                    material=design.filament.material,
-                )
+            roles = {k: Role(v) for k, v in design.roles.items()}
+            if design.product is Product.COASTER:
+                files, result = self._coaster(design, source, roles)
+            else:
+                files, result = self._cutter(design, source, roles)
+            if warning := bed_warning(result.dimensions, design.printer):
+                result.warnings.append(Message.of(warning))
             for name, data in files.items():
                 self.blobs.put(self._key(design_id, name), data, media_type(name))
-        except Exception as e:  # noqa: BLE001 - any failure is reported on the Design
-            log.exception("Generating design %s failed", design_id)
-            design = self.get(design_id).model_copy(update={"status": "failed", "error": str(e)})
+        except CodedError as e:  # a problem with the picture or the settings, not a bug
+            log.warning("Generating failed: %s", e, extra={"design_id": design_id, "code": e.notice.code})
+            design = self.get(design_id).model_copy(update={"status": "failed", "error": Message.of(e)})
             self.repo.save(design)
             return design
-        design = self.get(design_id).model_copy(
-            update={
-                "status": "ready",
-                "error": None,
-                "result": DesignResult(
-                    style=result.layout.style,
-                    outline=path_data(result.layout.silhouette),
-                    features=[f.feature for f in result.layout.features],
-                    warnings=result.cutter.warnings,
-                    estimate=result.estimate,
-                    dimensions=result.cutter.dimensions,
-                ),
-            }
-        )
+        except Exception as e:  # noqa: BLE001 - any failure is reported on the Design
+            log.exception("Generating design %s failed", design_id, extra={"design_id": design_id})
+            design = self.get(design_id).model_copy(update={"status": "failed", "error": Message.of(e)})
+            self.repo.save(design)
+            return design
+        design = self.get(design_id).model_copy(update={"status": "ready", "error": None, "result": result})
         self.repo.save(design)
+        log.info(
+            "Generated %s",
+            design.product.value,
+            extra={
+                "design_id": design_id,
+                "ms": round((time.perf_counter() - started) * 1000),
+                "grams": result.estimate.grams,
+                "warnings": [w.code for w in result.warnings],
+            },
+        )
         return design
+
+    def _exports(self, design: Design, parts, pause_z: float | None = None) -> dict[str, bytes]:
+        return {
+            fmt.filename(design.product): export(
+                parts,
+                fmt,
+                name=design.name,
+                product=design.product,
+                printer_id=design.printer,
+                material=design.filament.material,
+                pause_z=pause_z,
+            )
+            for fmt in Format
+        }
+
+    def _cutter(self, design: Design, source: bytes, roles) -> tuple[dict[str, bytes], DesignResult]:
+        result = make(source, design.cutter, design.trace, design.filament, roles)
+        files = {PICTURE: result.svg.encode(), ROLES: result.marked_svg.encode()}
+        files |= self._exports(design, result.cutter.parts)
+        return files, DesignResult(
+            product=Product.CUTTER,
+            style=result.layout.style,
+            outline=path_data(result.layout.silhouette),
+            features=[f.feature for f in result.layout.features],
+            warnings=[Message.of(w) for w in result.cutter.warnings],
+            estimate=result.estimate,
+            dimensions=result.cutter.dimensions,
+        )
+
+    def _coaster(self, design: Design, source: bytes, roles) -> tuple[dict[str, bytes], DesignResult]:
+        result = make_coaster(source, design.coaster, design.trace, design.filament, roles)
+        coaster = result.coaster
+        files = {PICTURE: result.svg.encode()}
+        # One STL per part for the preview, which colours them.
+        files |= {f"{p.name}.stl": export(p.mesh, Format.STL) for p in coaster.parts}
+        files |= self._exports(design, coaster.parts, coaster.pause_z)
+        return files, DesignResult(
+            product=Product.COASTER,
+            style=design.coaster.motif_style,
+            outline=path_data(result.layout.body),
+            features=[f.feature for f in result.layout.features],
+            warnings=[Message.of(w) for w in coaster.warnings],
+            estimate=result.estimate,
+            parts=result.parts,
+            dimensions=coaster.dimensions,
+            pause_z=coaster.pause_z,
+        )
 
     def picture(self, design_id: str) -> str:
         """The Design's picture as SVG, traced on demand."""
@@ -171,12 +223,14 @@ class DesignService:
         for name in self.files(design_id):
             self.blobs.put(self._key(copy.id, name), self.file(design_id, name), media_type(name))
         self.repo.save(copy)
+        log.info("Design duplicated", extra={"design_id": copy.id, "source_id": design_id})
         return copy
 
     def delete(self, design_id: str) -> None:
         self.get(design_id)
         self.repo.delete(design_id)
         self.blobs.delete_prefix(f"designs/{design_id}/")
+        log.info("Design deleted", extra={"design_id": design_id})
 
     def sweep(self) -> list[str]:
         """Delete Designs older than the retention period; returns their ids."""
