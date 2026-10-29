@@ -181,7 +181,7 @@ const en = {
     'Like any web server, this one sees your IP address, the time and the address you requested. They are only used to run and secure the service (Art. 6 (1) (f) GDPR) and are not combined with other data.',
   'privacy.cookies': 'No cookies, no tracking',
   'privacy.cookiesText':
-    'This site sets no cookies, uses no analytics or tracking and loads nothing from other servers. Your language choice is kept in your own browser only. “Open in Bambu Studio” only hands the file to the program on your own computer.',
+    'This site sets no cookies, uses no analytics or tracking and loads nothing from other servers. Your language choice is kept in your own browser only.',
   'privacy.rights': 'Your rights',
   'privacy.rightsText':
     'You can ask for access to, correction or deletion of your data, restriction of processing, data portability, and object to processing (Art. 15–21 GDPR). You can also complain to a data protection supervisory authority (Art. 77 GDPR).',
@@ -401,7 +401,7 @@ const de: Record<Key, string> = {
     'Wie jeder Webserver sieht dieser deine IP-Adresse, die Uhrzeit und die aufgerufene Adresse. Diese Daten dienen nur dem Betrieb und der Sicherheit des Dienstes (Art. 6 Abs. 1 lit. f DSGVO) und werden nicht mit anderen Daten zusammengeführt.',
   'privacy.cookies': 'Keine Cookies, kein Tracking',
   'privacy.cookiesText':
-    'Diese Seite setzt keine Cookies, nutzt keine Analyse- oder Tracking-Dienste und lädt nichts von fremden Servern. Deine Sprachwahl wird nur in deinem eigenen Browser gespeichert. „In Bambu Studio öffnen“ übergibt die Datei nur an das Programm auf deinem eigenen Computer.',
+    'Diese Seite setzt keine Cookies, nutzt keine Analyse- oder Tracking-Dienste und lädt nichts von fremden Servern. Deine Sprachwahl wird nur in deinem eigenen Browser gespeichert.',
   'privacy.rights': 'Deine Rechte',
   'privacy.rightsText':
     'Du hast das Recht auf Auskunft, Berichtigung und Löschung deiner Daten, auf Einschränkung der Verarbeitung, auf Datenübertragbarkeit und auf Widerspruch gegen die Verarbeitung (Art. 15–21 DSGVO). Außerdem kannst du dich bei einer Datenschutz-Aufsichtsbehörde beschweren (Art. 77 DSGVO).',

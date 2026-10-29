@@ -2,16 +2,18 @@ import { ArrowDownTrayIcon, ArrowTopRightOnSquareIcon, CubeIcon } from '@heroico
 import { bambuStudioLink, fileUrl, productFiles, type Design } from '../api'
 import { useI18n } from '../i18n'
 
-export function Downloads({ design }: { design: Design }) {
+export function Downloads({ design, hosted = false }: { design: Design; hosted?: boolean }) {
   const { t } = useI18n()
   const files = productFiles(design)
   const coaster = design.product === 'coaster'
   return (
     <div className="downloads">
-      <a className="btn primary" href={bambuStudioLink(design)}>
-        <ArrowTopRightOnSquareIcon className="icon" /> {t('download.openBambu')}
-      </a>
-      <a className="btn" href={fileUrl(design, files.bambu, true)}>
+      {!hosted && (
+        <a className="btn primary" href={bambuStudioLink(design)}>
+          <ArrowTopRightOnSquareIcon className="icon" /> {t('download.openBambu')}
+        </a>
+      )}
+      <a className={hosted ? 'btn primary' : 'btn'} href={fileUrl(design, files.bambu, true)}>
         <CubeIcon className="icon" /> {t('download.bambu')}
       </a>
       <div className="row">

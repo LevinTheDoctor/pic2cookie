@@ -339,7 +339,7 @@ function Shell() {
                 {result && (
                   <div className="card">
                     <h2>{t('download.title')}</h2>
-                    <Downloads design={design} />
+                    <Downloads design={design} hosted={!!hosting} />
                   </div>
                 )}
               </div>

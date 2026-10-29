@@ -1,7 +1,10 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Design } from './api'
 import App from './App'
+import { Downloads } from './components/Downloads'
 import { pathBounds } from './geometry'
+import { I18nProvider } from './I18nProvider'
 
 afterEach(() => {
   cleanup()
@@ -63,6 +66,21 @@ describe('App', () => {
     screen.getAllByRole('button', { name: 'Privacy' })[0].click()
     expect(await screen.findByText('Privacy notice (GDPR)')).toBeInTheDocument()
     expect(screen.getByText(/for 30 days after their last change/)).toBeInTheDocument()
+  })
+})
+
+describe('Downloads', () => {
+  const design = { id: 'abc', product: 'cutter', result: null } as unknown as Design
+
+  it('offers Open in Bambu Studio when run locally', () => {
+    render(<I18nProvider><Downloads design={design} /></I18nProvider>)
+    expect(screen.getByRole('link', { name: /Open in Bambu Studio/ })).toBeInTheDocument()
+  })
+
+  it('leaves out Open in Bambu Studio when hosted', () => {
+    render(<I18nProvider><Downloads design={design} hosted /></I18nProvider>)
+    expect(screen.queryByRole('link', { name: /Open in Bambu Studio/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Bambu project/ })).toHaveClass('primary')
   })
 })
 
